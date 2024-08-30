@@ -1,0 +1,75 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  DemoService
+
+  SAM Template for DemoService
+
+Globals:
+  Function:
+    Timeout: 600
+    MemorySize: 128
+    Runtime: nodejs18.x
+    ReservedConcurrentExecutions: 15
+
+Parameters:
+  Environment:
+    Type: String
+    AllowedValues:
+      - development
+      - staging
+      - production
+    Description: "Deployment Environment"
+  MongoDBUri:
+    Type: String
+    Description: "MongoDB connection URI"
+
+Resources:
+  DemoServiceQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "demo-service-queue-${Environment}"
+      VisibilityTimeout: 600
+  DemoServiceFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/
+      Handler: app.lambdaHandler
+      Runtime: nodejs18.x
+      Architectures:
+        - x86_64
+      Environment:
+        Variables:
+          MONGODB_URI: !Ref MongoDBUri
+          SQS_QUEUE_URL: !GetAtt DemoServiceQueue.QueueUrl
+      Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt DemoServiceQueue.Arn
+            BatchSize: 10
+            Enabled: True
+      Policies:
+        - AWSLambdaSQSQueueExecutionRole
+    Metadata:
+      BuildMethod: esbuild
+      BuildProperties:
+        Minify: true
+        Target: "es2020"
+        Sourcemap: true
+        EntryPoints: 
+        - app.ts
+
+Outputs:
+  DemoServiceFunction:
+    Description: "Demo Service Lambda Function ARN"
+    Value: !GetAtt DemoServiceFunction.Arn
+  DemoServiceFunctionIamRole:
+    Description: "Implicit IAM Role created for Demo Service function"
+    Value: !GetAtt DemoServiceFunctionRole.Arn
+  DemoServiceQueueUrl:
+    Description: "URL of the SQS Queue"
+    Value: !Ref DemoServiceQueue
+  Environment:
+    Description: "The environment this stack is deployed in"
+    Value: !Ref Environment
